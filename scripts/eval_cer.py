@@ -5,17 +5,32 @@ the speaker said); each variant is transcribed the same way and scored by
 character error rate against it (lower = clearer). Relative comparison only.
 Run with the system python that has faster-whisper:
   python scripts/eval_cer.py data/eval_in_25s.wav data/eval/v_*.wav
+  python scripts/eval_cer.py --ref-text ref.txt data/eval/v_*.wav   # true transcript as reference
+  python scripts/eval_cer.py --csv out.csv data/eval_in_25s.wav data/eval/v_*.wav
 """
-import os, re, sys, tempfile, wave
+import argparse, csv, os, re, sys, tempfile, wave
 import numpy as np
 from faster_whisper import WhisperModel
 
-model = WhisperModel("medium", device="cpu", compute_type="int8")
+ap = argparse.ArgumentParser()
+ap.add_argument("--ref-text", help="text file with the true transcript (then no reference wav is given)")
+ap.add_argument("--csv", help="also write results to this CSV")
+ap.add_argument("--model", default="medium")
+ap.add_argument("files", nargs="+", help="[reference.wav] variant.wav ...")
+args = ap.parse_args()
+
+model = WhisperModel(args.model, device="cpu", compute_type="int8")
 
 
 def transcribe(path):
     w = wave.open(path, "rb"); sr = w.getframerate(); n = w.getnframes()
-    sig = np.frombuffer(w.readframes(n), dtype=np.int16); w.close()
+    ch, sw = w.getnchannels(), w.getsampwidth()
+    raw = w.readframes(n); w.close()
+    if sw != 2:
+        raise SystemExit(f"{path}: need 16-bit PCM wav (got {8 * sw}-bit)")
+    sig = np.frombuffer(raw, dtype=np.int16)
+    if ch > 1:  # downmix to mono
+        sig = sig[: len(sig) // ch * ch].reshape(-1, ch).mean(axis=1).astype(np.int16)
     text, step, d = [], int(20 * sr), tempfile.mkdtemp()
     for i, pos in enumerate(range(0, len(sig), step)):
         piece = sig[pos:pos + step]
@@ -37,11 +52,24 @@ def lev(a, b):
     return dp[-1]
 
 
-ref = transcribe(sys.argv[1])
+def norm(t):
+    return re.sub(r"[\s、。,.!?！？・…]", "", t)
+
+
+if args.ref_text:
+    ref = norm(open(args.ref_text, encoding="utf-8").read())
+    variants = args.files
+else:
+    ref = transcribe(args.files[0])
+    variants = args.files[1:]
 print("REF:", ref)
 rows = []
-for p in sys.argv[2:]:
+for p in variants:
     hyp = transcribe(p)
     rows.append((lev(ref, hyp) / max(1, len(ref)), os.path.basename(p), hyp))
 for cer, name, hyp in sorted(rows):
     print(f"CER={cer:5.2f}  {name:22s} {hyp[:60]}")
+if args.csv:
+    with open(args.csv, "w", newline="", encoding="utf-8-sig") as f:
+        wr = csv.writer(f); wr.writerow(["cer", "file", "hypothesis"])
+        wr.writerows(sorted(rows))
