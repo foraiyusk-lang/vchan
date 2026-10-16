@@ -1,0 +1,21 @@
+# 環境・巨大ファイルはコミットしない(GitHub は1ファイル100MB上限)
+.venv/
+__pycache__/
+*.pyc
+rvc/
+data/
+logs/
+*.pth
+*.pt
+*.npy
+*.index
+*.bin
+*.onnx
+*.wav
+*.mp3
+*.flac
+
+# 再配布に注意が必要なもの(AquesTalk はライセンス上、リポジトリに入れない)
+tools/AquesTalk.dll
+tools/AqLicence.txt
+tools/AquesBatch.exe
