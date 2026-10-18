@@ -1,4 +1,4 @@
-"""Launch RVC's realtime voice-changer GUI with Reimu pitch mapping enabled.
+r"""Launch RVC's realtime voice-changer GUI with Reimu pitch mapping enabled.
 
   .venv\Scripts\python.exe scripts\reimu_realtime.py
 
